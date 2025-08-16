@@ -105,6 +105,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR args,
     wclass.lpfnWndProc = wproc;
     wclass.hInstance = instance;
     wclass.lpszClassName = CLASS_NAME;
+    wclass.hIcon = (HICON)LoadImageW(instance, MAKEINTRESOURCE(1), IMAGE_ICON,
+                                     256, 256, LR_DEFAULTCOLOR);
 
     RegisterClassW(&wclass);
 
