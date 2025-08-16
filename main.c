@@ -18,6 +18,17 @@ static COLORREF s_colours[S_COLOURS_SIZE] = {
 static size_t s_colour_index = 0;
 static BOOL s_quit_on_focus_lost = TRUE;
 
+static void set_cursor(BOOL on) {
+    CURSORINFO inf;
+    inf.cbSize = sizeof(CURSORINFO);
+    GetCursorInfo(&inf);
+
+    if (inf.flags == CURSOR_SHOWING && on == FALSE)
+        ShowCursor(FALSE);
+    else if (inf.flags == 0 && on == TRUE)
+        ShowCursor(TRUE);
+}
+
 LRESULT CALLBACK wproc(HWND hwnd, UINT user_msg, WPARAM wparam, LPARAM lparam) {
     switch (user_msg) {
     case WM_CREATE: {
@@ -31,6 +42,8 @@ LRESULT CALLBACK wproc(HWND hwnd, UINT user_msg, WPARAM wparam, LPARAM lparam) {
     case WM_ACTIVATEAPP: {
         if (s_quit_on_focus_lost && (BOOL)wparam == FALSE) {
             PostQuitMessage(EXIT_SUCCESS);
+        } else if (!s_quit_on_focus_lost) {
+            ShowCursor(!wparam);
         }
         return EXIT_SUCCESS;
     }
@@ -117,6 +130,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR args,
 
     if (hwnd == NULL)
         return EXIT_FAILURE;
+
+    set_cursor(FALSE);
 
     MSG msg = {};
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
