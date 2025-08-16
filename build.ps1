@@ -13,6 +13,15 @@ $i = 0
 foreach ($arg in $args) {
     if ($arg -eq "-v") { $verbose = "-v" }
     elseif ($arg -eq "run") { $run = 1 }
+    elseif ($arg -eq "clean") {
+        rm -force *.exe
+        rm -force *.pdb
+        rm -force *.res
+        rm -force *.rdi
+        rm -force *.ilk
+
+        exit 0
+    }
     elseif ($arg -eq "--release") { $opt = "-O3" }
     elseif ($arg -eq "--rc") { 
         if ($args.Length -gt $i + 1) {
