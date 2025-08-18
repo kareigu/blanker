@@ -112,6 +112,8 @@ static void parse_args(PWSTR args) {
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance, PWSTR args,
                     int w_state) {
+    (void)prev_instance;
+    (void)w_state;
     parse_args(args);
 
     WNDCLASS wclass = {};
