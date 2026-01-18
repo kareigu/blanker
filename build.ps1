@@ -1,4 +1,4 @@
-$entry = "main.c"
+$entry = "main_win32.c"
 $rc = "blanker.rc"
 $res = "blanker.res"
 $output = "blanker.exe"
