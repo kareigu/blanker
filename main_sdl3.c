@@ -17,15 +17,27 @@
 #define MAX_TIMESTEP_MS 100
 #define INACTIVITY_TIME_MS 2000
 
-static SDL_Color s_colours[] = {
-    {0, 0, 0, SDL_ALPHA_OPAQUE},       {255, 0, 0, SDL_ALPHA_OPAQUE},
-    {0, 255, 0, SDL_ALPHA_OPAQUE},     {0, 0, 255, SDL_ALPHA_OPAQUE},
-    {255, 255, 255, SDL_ALPHA_OPAQUE},
+static SDL_FColor s_colours[] = {
+    {0.0f, 0.0f, 0.0f, SDL_ALPHA_OPAQUE_FLOAT},
+    {1.0f, 0.0f, 0.0f, SDL_ALPHA_OPAQUE_FLOAT},
+    {0.0f, 1.0f, 0.0f, SDL_ALPHA_OPAQUE_FLOAT},
+    {0.0f, 0.0f, 1.0f, SDL_ALPHA_OPAQUE_FLOAT},
+    {1.0f, 1.0f, 1.0f, SDL_ALPHA_OPAQUE_FLOAT},
 };
 
 typedef struct {
     bool quit_on_focus_lost;
 } config_t;
+
+typedef struct {
+    size_t prev_colour_i;
+    size_t target_colour_i;
+    float time;
+} render_state_t;
+
+inline static float flerp(float a, float b, float t) {
+    return a * (1.0f - t) + b * t;
+}
 
 int main(int argc_, char** argv_) {
     size_t argc = (size_t)argc_;
@@ -151,6 +163,11 @@ int main(int argc_, char** argv_) {
     uint64_t prev_action = prev_frame;
     uint64_t loop_duration_ms = target_loop_duration_ms;
     size_t current_colour = 0;
+    render_state_t render_state = (render_state_t){
+        .prev_colour_i = 0,
+        .target_colour_i = 0,
+        .time = 0.0f,
+    };
     while (running) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -179,11 +196,11 @@ int main(int argc_, char** argv_) {
                     redraw = true;
                     break;
                 case SDLK_SPACE: {
-                    size_t new_colour =
-                        (size_t)SDL_rand(sizeof(s_colours) / sizeof(SDL_Color));
+                    size_t new_colour = (size_t)SDL_rand(sizeof(s_colours) /
+                                                         sizeof(SDL_FColor));
                     while (new_colour == current_colour)
                         new_colour = (size_t)SDL_rand(sizeof(s_colours) /
-                                                      sizeof(SDL_Color));
+                                                      sizeof(SDL_FColor));
 
                     LOG_DEBUG("colour rerolled to %lu", new_colour);
                     current_colour = new_colour;
@@ -193,22 +210,45 @@ int main(int argc_, char** argv_) {
             }
         }
 
+        const uint64_t curr_frame = SDL_GetTicks();
+        const uint64_t time_since = curr_frame - prev_frame;
+        prev_frame = curr_frame;
+
         if (redraw) {
-            prev_action = SDL_GetTicks();
-            SDL_Color colour = s_colours[current_colour];
+            loop_duration_ms = target_loop_duration_ms;
+            const float animation_length_ms = 300.0f;
+            prev_action = curr_frame;
+
+            const SDL_FColor prev_colour = s_colours[render_state.prev_colour_i];
+            const SDL_FColor target_colour = s_colours[render_state.target_colour_i];
+            const float t = render_state.time / animation_length_ms;
+            const float eased_t = -(SDL_cosf(3.1456 * t) - 1) / 2.0f;
+
+            const SDL_FColor colour = {
+                .r = flerp(prev_colour.r, target_colour.r, eased_t),
+                .g = flerp(prev_colour.g, target_colour.g, eased_t),
+                .b = flerp(prev_colour.b, target_colour.b, eased_t),
+                .a = flerp(prev_colour.a, target_colour.a, eased_t),
+            };
             SDL_SetRenderDrawColorFloat(renderer, colour.r, colour.g, colour.b,
                                         colour.a);
             SDL_RenderClear(renderer);
             SDL_RenderPresent(renderer);
-            loop_duration_ms = target_loop_duration_ms;
-            redraw = false;
+
+            render_state.time += time_since;
+            if (render_state.time > animation_length_ms) {
+                render_state.time = 0.0f;
+                render_state.prev_colour_i = render_state.target_colour_i;
+                if (render_state.target_colour_i == current_colour)
+                    redraw = false;
+                else
+                    render_state.target_colour_i = current_colour;
+            }
+
+            continue;
         }
 
-        uint64_t curr_frame = SDL_GetTicks();
-        uint64_t time_since = curr_frame - prev_frame;
-        prev_frame = curr_frame;
-
-        uint64_t time_since_inactive = curr_frame - prev_action;
+        const uint64_t time_since_inactive = curr_frame - prev_action;
         if (time_since_inactive > INACTIVITY_TIME_MS &&
             loop_duration_ms < MAX_TIMESTEP_MS) {
             float t =
