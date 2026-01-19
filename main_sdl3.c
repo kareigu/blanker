@@ -1,0 +1,194 @@
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_main.h>
+#include <stdlib.h>
+
+#define LOG_INFO(args...) SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, args)
+#define LOG_WARN(args...) SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, args)
+#define LOG_ERROR(args...) SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, args)
+#define LOG_DEBUG(args...) SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, args)
+
+#if DEBUG
+#define DEFAULT_LOG_LEVEL SDL_LOG_PRIORITY_DEBUG
+#else
+#define DEFAULT_LOG_LEVEL SDL_LOG_PRIORITY_INFO
+#endif
+
+#define MIN_TIMESTEP_MS 100
+
+typedef struct {
+    bool quit_on_focus_lost;
+} config_t;
+
+int main(int argc_, char** argv_) {
+    size_t argc = (size_t)argc_;
+    const char** argv = (const char**)argv_;
+
+    SDL_SetLogPriorityPrefix(SDL_LOG_PRIORITY_INFO, "INFO: ");
+    SDL_SetLogPriorityPrefix(SDL_LOG_PRIORITY_TRACE, "TRACE: ");
+    SDL_SetLogPriorityPrefix(SDL_LOG_PRIORITY_DEBUG, "DEBUG: ");
+    SDL_SetLogPriorityPrefix(SDL_LOG_PRIORITY_VERBOSE, "VERBOSE: ");
+    SDL_LogPriority log_level = DEFAULT_LOG_LEVEL;
+    config_t config;
+    config.quit_on_focus_lost = true;
+
+    for (size_t i = 1; i < argc; i++) {
+        const char* arg = argv[i];
+
+        if (arg[0] != '-') {
+            LOG_WARN("unknown argument: %s", arg);
+            continue;
+        }
+
+        if (strncmp("-l", arg, 2) == 0 ||
+            strncmp("--log-level", arg, sizeof("--log-level")) == 0) {
+            if (++i >= argc) {
+                LOG_ERROR("missing argument for %s", arg);
+                return EXIT_FAILURE;
+            }
+            arg = argv[i];
+            if (strncmp("info", arg, 4) == 0)
+                log_level = SDL_LOG_PRIORITY_INFO;
+            else if (strncmp("warn", arg, 4) == 0)
+                log_level = SDL_LOG_PRIORITY_WARN;
+            else if (strncmp("error", arg, 5) == 0)
+                log_level = SDL_LOG_PRIORITY_ERROR;
+            else if (strncmp("debug", arg, 5) == 0)
+                log_level = SDL_LOG_PRIORITY_DEBUG;
+            else if (strncmp("verbose", arg, 7) == 0)
+                log_level = SDL_LOG_PRIORITY_VERBOSE;
+            else if (strncmp("trace", arg, 5) == 0)
+                log_level = SDL_LOG_PRIORITY_TRACE;
+            else {
+                LOG_ERROR("invalid log level provided: %s", arg);
+                return EXIT_FAILURE;
+            }
+
+            continue;
+        }
+        if (strncmp("-f", arg, 2) == 0 ||
+            strncmp("--ignore-focus", arg, sizeof("--ignore-focus")) == 0) {
+            config.quit_on_focus_lost = false;
+            LOG_INFO("disabled quit on focus lost");
+            continue;
+        }
+
+        LOG_ERROR("unknown flag: %s", arg);
+        return EXIT_FAILURE;
+    }
+
+    SDL_SetLogPriorities(log_level);
+
+    SDL_Window* window = NULL;
+    SDL_Renderer* renderer = NULL;
+
+    if (!SDL_SetAppMetadata("blanker", "0.1", "com.kareigu.blanker")) {
+        LOG_WARN("Failed setting metadata: %s", SDL_GetError());
+    }
+
+    if (!SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1")) {
+        LOG_WARN("Failed setting : %s", SDL_GetError());
+    }
+
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+        LOG_ERROR("Failed initialising SDL: %s", SDL_GetError());
+        return EXIT_FAILURE;
+    }
+
+    if (!SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW)) {
+        LOG_WARN("Failed setting thread priority to low: %s", SDL_GetError());
+    }
+
+    const SDL_DisplayMode* display_mode =
+        SDL_GetCurrentDisplayMode(SDL_GetPrimaryDisplay());
+    if (display_mode == NULL) {
+        SDL_Log("Failed getting primary display info: %s", SDL_GetError());
+        return EXIT_FAILURE;
+    }
+
+    size_t window_width = display_mode->w * display_mode->pixel_density;
+    size_t window_height = display_mode->h * display_mode->pixel_density;
+    LOG_INFO("Setting window size to %lux%lu", window_width, window_height);
+    if (!SDL_CreateWindowAndRenderer("blanker", window_width, window_height,
+                                     SDL_WINDOW_BORDERLESS |
+                                         SDL_WINDOW_FULLSCREEN,
+                                     &window, &renderer)) {
+        LOG_ERROR("Failed creating window or renderer: %s", SDL_GetError());
+        return EXIT_FAILURE;
+    }
+    SDL_SetRenderLogicalPresentation(renderer, 1, 1,
+                                     SDL_LOGICAL_PRESENTATION_INTEGER_SCALE);
+    if (!SDL_SetRenderVSync(renderer, 1)) {
+        LOG_WARN("Failed enabling vsync: %s", SDL_GetError());
+    }
+
+    uint64_t target_loop_duration_ms = 16;
+    if (display_mode->refresh_rate > 0.0f) {
+        target_loop_duration_ms = (uint64_t)display_mode->refresh_rate;
+        LOG_INFO("set target_loop_duration_ms to monitor refresh rate: %lu",
+                 target_loop_duration_ms);
+    } else {
+        LOG_WARN("Monitor has an invalid refresh rate, using default "
+                 "target_loop_duration_ms = %lu",
+                 target_loop_duration_ms);
+    }
+
+    if (!SDL_HideCursor()) {
+        LOG_WARN("Failed hiding cursor: %s", SDL_GetError());
+    }
+
+    bool running = true;
+    bool redraw = true;
+    uint64_t prev_frame = SDL_GetTicks();
+    while (running) {
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            switch (ev.type) {
+            case SDL_EVENT_QUIT:
+            case SDL_EVENT_WINDOW_FOCUS_LOST:
+                LOG_DEBUG("focus lost, exiting");
+                if (config.quit_on_focus_lost) {
+                    running = false;
+                    continue;
+                }
+                break;
+            case SDL_EVENT_WINDOW_RESIZED:
+                redraw = true;
+                break;
+            case SDL_EVENT_KEY_DOWN:
+                switch (ev.key.key) {
+                case SDLK_ESCAPE:
+                case SDLK_Q:
+                    LOG_DEBUG("exiting through keypress");
+                    running = false;
+                    continue;
+                    break;
+                }
+                break;
+            }
+        }
+
+        if (redraw) {
+            SDL_SetRenderDrawColorFloat(renderer, 0, 0, 0,
+                                        SDL_ALPHA_OPAQUE_FLOAT);
+            SDL_RenderClear(renderer);
+            SDL_RenderPresent(renderer);
+            redraw = false;
+        }
+
+        uint64_t curr_frame = SDL_GetTicks();
+        uint64_t time_since = curr_frame - prev_frame;
+        prev_frame = curr_frame;
+        int wait_for = (1000 / target_loop_duration_ms) - time_since;
+        if (wait_for <= 0) {
+            continue;
+        }
+        SDL_Delay(wait_for);
+    }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    return EXIT_SUCCESS;
+}
