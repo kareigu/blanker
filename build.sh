@@ -2,6 +2,7 @@
 
 CC="clang"
 DEBUG=1
+INSTALL=0
 
 COMPILERS="clang gcc cc"
 
@@ -11,11 +12,15 @@ WARN_FLAGS="-Wall -Wextra -Werror"
 LINK_FLAGS="-lSDL3"
 OUTPUT_NAME="blanker"
 
+INSTALL_PATH="/usr/local"
+DESKTOP_FILE="blanker.desktop"
+
 for arg in "$@"; do
     if [ "$arg" = "clang" ]; then CC="clang"; fi
     if [ "$arg" = "gcc" ]; then CC="gcc"; fi
     if [ "$arg" = "release" ]; then DEBUG=0; fi
     if [ "$arg" = "debug" ]; then DEBUG=1; fi
+    if [ "$arg" = "install" ]; then INSTALL=1; fi
 done
 
 if [ ! -x $(which "$CC") ]; then
@@ -46,5 +51,10 @@ else
     echo "  BUILD_TYPE=release"
 fi
 
-set -x
-$CC $SOURCES $OPT_FLAGS $WARN_FLAGS $LINK_FLAGS "-DDEBUG=$DEBUG" -o "$OUTPUT_NAME"
+
+(set -x; $CC $SOURCES $OPT_FLAGS $WARN_FLAGS $LINK_FLAGS "-DDEBUG=$DEBUG" -o "$OUTPUT_NAME")
+
+if [ $INSTALL -eq 1 ]; then
+   echo "installing to $INSTALL_PATH" 
+   sudo sh -c "set -x; cp $OUTPUT_NAME $INSTALL_PATH/bin/ && cp $(dirname $0)/$DESKTOP_FILE $INSTALL_PATH/share/applications/"
+fi
