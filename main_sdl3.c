@@ -124,9 +124,10 @@ int main(int argc_, char** argv_) {
 
     uint64_t target_loop_duration_ms = 16;
     if (display_mode->refresh_rate > 0.0f) {
-        target_loop_duration_ms = (uint64_t)display_mode->refresh_rate;
-        LOG_INFO("set target_loop_duration_ms to monitor refresh rate: %lu",
-                 target_loop_duration_ms);
+        target_loop_duration_ms = 1000 / (uint64_t)display_mode->refresh_rate;
+        LOG_INFO(
+            "set target_loop_duration_ms from monitor refresh rate: %lu ms",
+            target_loop_duration_ms);
     } else {
         LOG_WARN("Monitor has an invalid refresh rate, using default "
                  "target_loop_duration_ms = %lu",
