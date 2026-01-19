@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Blanker
+GenericName=Screen blanking tool
+Type=Application
+Exec=blanker %u
+Icon=video-display
+Comment=Blank out your screen in a variety of possible colours.
+Keywords=display;blank;black;off
+Categories=Utility;
