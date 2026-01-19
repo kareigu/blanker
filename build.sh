@@ -51,8 +51,15 @@ else
     echo "  BUILD_TYPE=release"
 fi
 
+if [ -x $(which git) ]; then
+    BUILD_HASH=$(git rev-parse --short HEAD)
+    if [ $? -ne 0 ]; then
+        BUILD_HASH="00000"
+        echo "failed getting git hash"
+    fi
+fi
 
-(set -x; $CC $SOURCES $OPT_FLAGS $WARN_FLAGS $LINK_FLAGS "-DDEBUG=$DEBUG" -o "$OUTPUT_NAME")
+(set -x; $CC $SOURCES $OPT_FLAGS $WARN_FLAGS $LINK_FLAGS "-DDEBUG=$DEBUG" "-DBUILD_HASH=\"$BUILD_HASH\"" -o "$OUTPUT_NAME")
 
 if [ $INSTALL -eq 1 ]; then
    echo "installing to $INSTALL_PATH" 

@@ -101,7 +101,7 @@ int main(int argc_, char** argv_) {
     SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;
 
-    if (!SDL_SetAppMetadata("blanker", "0.1", "com.kareigu.blanker")) {
+    if (!SDL_SetAppMetadata("blanker", BUILD_HASH, "com.kareigu.blanker")) {
         LOG_WARN("Failed setting metadata: %s", SDL_GetError());
     }
 
