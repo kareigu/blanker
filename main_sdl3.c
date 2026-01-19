@@ -17,6 +17,12 @@
 #define MAX_TIMESTEP_MS 100
 #define INACTIVITY_TIME_MS 2000
 
+static SDL_Color s_colours[] = {
+    {0, 0, 0, SDL_ALPHA_OPAQUE},       {255, 0, 0, SDL_ALPHA_OPAQUE},
+    {0, 255, 0, SDL_ALPHA_OPAQUE},     {0, 0, 255, SDL_ALPHA_OPAQUE},
+    {255, 255, 255, SDL_ALPHA_OPAQUE},
+};
+
 typedef struct {
     bool quit_on_focus_lost;
 } config_t;
@@ -144,6 +150,7 @@ int main(int argc_, char** argv_) {
     uint64_t prev_frame = SDL_GetTicks();
     uint64_t prev_action = prev_frame;
     uint64_t loop_duration_ms = target_loop_duration_ms;
+    size_t current_colour = 0;
     while (running) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
@@ -171,15 +178,26 @@ int main(int argc_, char** argv_) {
                     LOG_DEBUG("rerender triggered");
                     redraw = true;
                     break;
+                case SDLK_SPACE: {
+                    size_t new_colour =
+                        (size_t)SDL_rand(sizeof(s_colours) / sizeof(SDL_Color));
+                    while (new_colour == current_colour)
+                        new_colour = (size_t)SDL_rand(sizeof(s_colours) /
+                                                      sizeof(SDL_Color));
+
+                    LOG_DEBUG("colour rerolled to %lu", new_colour);
+                    current_colour = new_colour;
+                    redraw = true;
+                } break;
                 }
-                break;
             }
         }
 
         if (redraw) {
             prev_action = SDL_GetTicks();
-            SDL_SetRenderDrawColorFloat(renderer, 0, 0, 0,
-                                        SDL_ALPHA_OPAQUE_FLOAT);
+            SDL_Color colour = s_colours[current_colour];
+            SDL_SetRenderDrawColorFloat(renderer, colour.r, colour.g, colour.b,
+                                        colour.a);
             SDL_RenderClear(renderer);
             SDL_RenderPresent(renderer);
             loop_duration_ms = target_loop_duration_ms;
