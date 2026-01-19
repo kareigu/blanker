@@ -14,7 +14,8 @@
 #define DEFAULT_LOG_LEVEL SDL_LOG_PRIORITY_INFO
 #endif
 
-#define MIN_TIMESTEP_MS 100
+#define MAX_TIMESTEP_MS 100
+#define INACTIVITY_TIME_MS 2000
 
 typedef struct {
     bool quit_on_focus_lost;
@@ -141,14 +142,16 @@ int main(int argc_, char** argv_) {
     bool running = true;
     bool redraw = true;
     uint64_t prev_frame = SDL_GetTicks();
+    uint64_t prev_action = prev_frame;
+    uint64_t loop_duration_ms = target_loop_duration_ms;
     while (running) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             switch (ev.type) {
             case SDL_EVENT_QUIT:
             case SDL_EVENT_WINDOW_FOCUS_LOST:
-                LOG_DEBUG("focus lost, exiting");
                 if (config.quit_on_focus_lost) {
+                    LOG_DEBUG("focus lost, exiting");
                     running = false;
                     continue;
                 }
@@ -164,23 +167,43 @@ int main(int argc_, char** argv_) {
                     running = false;
                     continue;
                     break;
+                case SDLK_R:
+                    LOG_DEBUG("rerender triggered");
+                    redraw = true;
+                    break;
                 }
                 break;
             }
         }
 
         if (redraw) {
+            prev_action = SDL_GetTicks();
             SDL_SetRenderDrawColorFloat(renderer, 0, 0, 0,
                                         SDL_ALPHA_OPAQUE_FLOAT);
             SDL_RenderClear(renderer);
             SDL_RenderPresent(renderer);
+            loop_duration_ms = target_loop_duration_ms;
             redraw = false;
         }
 
         uint64_t curr_frame = SDL_GetTicks();
         uint64_t time_since = curr_frame - prev_frame;
         prev_frame = curr_frame;
-        int wait_for = (1000 / target_loop_duration_ms) - time_since;
+
+        uint64_t time_since_inactive = curr_frame - prev_action;
+        if (time_since_inactive > INACTIVITY_TIME_MS &&
+            loop_duration_ms < MAX_TIMESTEP_MS) {
+            float t =
+                (float)(time_since_inactive - INACTIVITY_TIME_MS) / 1000.0f;
+            float new_target_f = (float)loop_duration_ms * (1.0f - t) +
+                                 (float)MAX_TIMESTEP_MS * t;
+            uint64_t new_target = (uint64_t)SDL_floorf(new_target_f);
+            loop_duration_ms =
+                new_target < MAX_TIMESTEP_MS ? new_target : MAX_TIMESTEP_MS;
+            LOG_DEBUG("inactive: set tickrate to %lu ms", loop_duration_ms);
+        }
+
+        int wait_for = loop_duration_ms - time_since;
         if (wait_for <= 0) {
             continue;
         }
